@@ -1,0 +1,23 @@
+ros_topics:
+    camera_topic:  "/camera/image_color"
+    lidar_topic: "/velodyne_points"
+
+image_select_col: 6
+azimuth_angle_degrees:
+    lower_val: -22
+    upper_val: 22
+
+depth_threshold_metres:
+    lower_val: 0
+    upper_val: 4
+
+residual_thresh_ransac_metres: 0.15
+min_points_ransac: 10
+num_iter_ransac: 1000
+num_samples_train: 25
+camera_fps: 7
+lidar_freq: 10
+square_length_metres: 0.108
+plot_cam_lidar_normals: false
+plot_cam_lidar_plots: false
+duration_sec: 120
