@@ -18,6 +18,15 @@ with open ('calib_config.yaml') as f:
     config = yaml.full_load(f)
 
 
+objp = np.zeros((6*8,3), np.float32)
+objp[:,:2] = np.mgrid[0:8,0:6].T.reshape(-1,2)
+
+# Arrays to store object points and image points from all the images.
+objpoints = [] # 3d point in real world space
+imgpoints = [] # 2d points in image plane.
+
+
+
 def find_lidar_centres(lidar_points):
     lidar_centres = []
     for i in range(len(lidar_points)):
@@ -59,38 +68,74 @@ def rotation_calculation(A,B):
     return R
 
 
-def load_data(path):
+def load_data(path, camera):
     
     path = path
-    files=os.listdir(path)
+    # files=os.listdir(path)
     # print(files)
-    data,images,lidar_points=[],[],[]
-    image_path=os.path.join(path,files[0])
-    lidar_points_path=os.path.join(path, files[1])
+    images,lidar_points=[],[]
+    if camera == "left":
+        image_path=os.path.join(path,"imagesLeft")
+    else:
+        image_path=os.path.join(path,"imagesRight")
+
+
+    lidar_points_path=os.path.join(path, "lidarPoints")
     images_folder=sorted(os.listdir(image_path))
     lidar_points_folder=sorted(os.listdir(lidar_points_path))
-    
-    # print("lidar points folder :" , lidar_points_folder)
-    # print("images folder : ", images_folder)
-    os.chdir(image_path)
-    for i in images_folder:
-        images.append(cv2.imread(i))
-    
+    # print("image_folder : \n\n", images_folder)
+    # print("lidar points folder : \n\n", lidar_points_folder)
+
+    print("lidar points folder :" , lidar_points_folder)
+    print("\n\nimages folder : ", images_folder)
+    # os.chdir(image_path)
+    for i in sorted(os.listdir(image_path)):
+        img = cv2.imread(os.path.join(image_path, i))
+        images.append(img)
+        
+        # cv2.imshow("frame", img)
+        # cv2.waitKey(0)
     # print(images)
-    os.chdir(lidar_points_path)
+    # cv2.destroyAllWindows()
+    # os.chdir(lidar_points_path)
     
-    for j in lidar_points_folder:
+    for j in sorted(os.listdir(lidar_points_path)):
         try:
-            lidar_points.append(np.load(j))
+            lidar_points.append(np.load(os.path.join(lidar_points_path, j)))
         except:
-            lidar_points.append(np.loadtxt(j))
+            lidar_points.append(np.loadtxt(os.path.join(lidar_points_path, j)))
 
 
-    for d in data:
-        images.append(d['data'][0][0][0])
-        lidar_points.append(d['data'][0][0][1])
+    print("shape of images before adding d :", np.shape(images))
+    print("shape of images after adding d :", np.shape(images))
     
-    return images,np.array(lidar_points)
+    
+    final_images = []
+    final_lidar_points= []
+    print("length of images : ", len(final_images))
+    
+    print("length of lidar points : ", len(final_lidar_points))
+
+    for i in range(len(images)):
+        # print("type of img is : {}".format(type(img)))
+        # print(img)
+        
+        gray = cv2.cvtColor(images[i],cv2.COLOR_BGR2GRAY)
+        # cv2.imshow("gray", gray)
+
+        # Find the chess board corners
+        ret, corners = cv2.findChessboardCorners(gray, (8,6),None)
+
+    
+        # If found, add object points, image points (after refining them)
+        if ret == True:
+            final_images.append(images[i])
+            final_lidar_points.append(lidar_points[i])
+
+
+
+    return final_images,np.array(final_lidar_points)
+
 
 
 def normal_in_camera_frame(rvecs):
@@ -136,11 +181,12 @@ def get_extrinsic_matrices(images, objpoints, imgpoints):
     h = 1288
     print("width and height of the image: ", w, h)
 
-    
     for img in images:
+        # print("type of img is : {}".format(type(img)))
         # print(img)
         
         gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+        # cv2.imshow("gray", gray)
 
         # Find the chess board corners
         ret, corners = cv2.findChessboardCorners(gray, (8,6),None)
@@ -154,9 +200,9 @@ def get_extrinsic_matrices(images, objpoints, imgpoints):
             corners2 = cv2.cornerSubPix(gray,corners,(11,11),(-1,-1),criteria)
             imgpoints.append(corners2)            
         # Draw and display the corners
-        # cv2.drawChessboardCorners(img, (8,6), corners2, ret)
-        # cv2.imshow('img', img)
-        # cv2.waitKey(500)
+        cv2.drawChessboardCorners(img, (8,6), corners2, ret)
+        cv2.imshow('img', img)
+        cv2.waitKey(0)
             #print(corners2)
 
     objpoints = [x * config["square_length_metres"] for x in objpoints]
@@ -353,7 +399,7 @@ def transformation(sensor_to_points, sensor_from_points, rotation, translation, 
     for i in range(len(sensor_from_points)):
         points = sensor_from_points[i]
         # print("shape of points : ", np.shape(camera_points[i]))
-        translation_vec = np.ones((1,len(sensor_from_points[i]))) * translation_CTL.T
+        translation_vec = np.ones((1,len(sensor_from_points[i]))) * translation.T
         # print("shape of translation : ", np.shape(translation))
         transformation = np.dot(rotation, points.T) + translation_vec
         # transformation  = np.dot(rotation_vectors[i].T, (points - translation))
@@ -366,18 +412,134 @@ def transformation(sensor_to_points, sensor_from_points, rotation, translation, 
 
                 ax.scatter(transformed_points[i][:,0], transformed_points[i][:,1], transformed_points[i][:,2], c = "black", s=5)  
                 ax.scatter(sensor_to_points[i][:,0], sensor_to_points[i][:,1], sensor_to_points[i][:,2], c = "red", s=1)        
-                plt.savefig(os.path.join(args.output_dir, "transformations"))
+                # plt.savefig(os.path.join(args.output_dir, "transformations"))
                 plt.show()
     
     return transformed_points
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--training_dir', required=False, type=str, help='training_folder')
-    parser.add_argument('--testing_dir', required=False, type=str, help='testing_folder')
-    parser.add_argument('--output_dir', required = True, type=str, help='Folder to save rotation and translation vectors')
+
+
+def stereoCalibration(trainingDir, validationDir, outputDir):
+
+
+    if not (os.path.exists(outputDir)):
+        os.makedirs(outputDir)
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+
+    rows, columns = 8, 6
+
+    objp = np.zeros((rows*columns,3), np.float32)
+    objp[:,:2] = np.mgrid[0:rows,0:columns].T.reshape(-1,2)
+
+    img_ptsL = []
+    img_ptsR = []
+    obj_pts = []
+
+    squareLengthMetres = 0.108
+
+    for i, j in zip(sorted(os.listdir(os.path.join(trainingDir, "imagesLeft"))) ,sorted(os.listdir(os.path.join(trainingDir, "imagesRight")))):  
+        print(j)
+        # print(os.path.join(rightImagesDir, i))
+        imgL = cv2.imread(os.path.join(trainingDir, "imagesLeft", i))
+        imgR = cv2.imread(os.path.join(trainingDir, "imagesRight", j))
+        # cv2.imshow("frame", imgR)
+        # cv2.waitKey(0)
+        
+        imgL_gray = cv2.cvtColor(imgL,cv2.COLOR_BGR2GRAY)
+        imgR_gray = cv2.cvtColor(imgR,cv2.COLOR_BGR2GRAY)
+
+        outputL = imgL.copy()
+        outputR = imgR.copy()
+
+        retR, cornersR =  cv2.findChessboardCorners(outputR,(rows,columns),None)
+        retL, cornersL = cv2.findChessboardCorners(outputL,(rows,columns),None)
+
+        if retR and retL:
+            obj_pts.append(objp)
+            cv2.cornerSubPix(imgR_gray,cornersR,(11,11),(-1,-1),criteria)
+            cv2.cornerSubPix(imgL_gray,cornersL,(11,11),(-1,-1),criteria)
+            cv2.drawChessboardCorners(outputR,(rows,columns),cornersR,retR)
+            cv2.drawChessboardCorners(outputL,(rows,columns),cornersL,retL)
+            # cv2.imshow('cornersR',outputR)
+            # cv2.imshow('cornersL',outputL)
+            # cv2.waitKey(0)
+
+            img_ptsL.append(cornersL)
+            img_ptsR.append(cornersR)
+
+        cv2.destroyAllWindows()
+
+
     
-    args = parser.parse_args()
+    print("obj_pts len is : {}".format(len(obj_pts)))
+
+
+    objpoints = [x * squareLengthMetres for x in obj_pts]
+        
+    # Calibrating left camera
+    retL, mtxL, distL, rvecsL, tvecsL = cv2.calibrateCamera(objpoints,img_ptsL,imgL_gray.shape[::-1],None,None)
+    hL,wL= imgL_gray.shape[:2]
+    new_mtxL, roiL= cv2.getOptimalNewCameraMatrix(mtxL,distL,(wL,hL),1,(wL,hL))
+
+    print("Left camera intrinsic matrix : {}".format(mtxL))
+
+
+        # undistort
+    
+    mean_error = 0
+    for i in range(len(objpoints)):
+        imgpoints2, _ = cv2.projectPoints(objpoints[i], rvecsL[i], tvecsL[i], mtxL, distL)
+        error = cv2.norm(img_ptsL[i], imgpoints2, cv2.NORM_L2)/len(imgpoints2)
+        mean_error += error
+    print( "total error left: {}".format(mean_error/len(objpoints)) )
+
+
+    # Calibrating right camera
+    retR, mtxR, distR, rvecsR, tvecsR = cv2.calibrateCamera(objpoints,img_ptsR,imgR_gray.shape[::-1],None,None)
+    hR,wR= imgR_gray.shape[:2]
+    new_mtxR, roiR= cv2.getOptimalNewCameraMatrix(mtxR,distR,(wR,hR),1,(wR,hR))
+
+    print("Right camera intrinsic matrix : {}".format(mtxR))
+
+    
+    mean_error = 0
+    for i in range(len(objpoints)):
+        imgpoints2, _ = cv2.projectPoints(objpoints[i], rvecsR[i], tvecsR[i], mtxR, distR)
+        error = cv2.norm(img_ptsR[i], imgpoints2, cv2.NORM_L2)/len(imgpoints2)
+        mean_error += error
+    print( "total error right : {}".format(mean_error/len(objpoints)) )
+
+
+
+    flags = 0
+    # flags |= cv2.CALIB_FIX_INTRINSIC
+    # Here we fix the intrinsic camara matrixes so that only Rot, Trns, Emat and Fmat are calculated.
+    # Hence intrinsic parameters are the same 
+
+
+    # This step is performed to transformation between the two cameras and calculate Essential and Fundamenatl matrix
+    retS, new_mtxL, distL, new_mtxR, distR, Rot, Trns, Emat, Fmat = cv2.stereoCalibrate(objpoints, img_ptsL, img_ptsR, mtxL, distL, mtxR, distR, imgL_gray.shape[::-1], criteria, flags)
+
+
+    rectify_scale= 1
+    rect_l, rect_r, proj_mat_l, proj_mat_r, Q, roiL, roiR= cv2.stereoRectify(mtxL, distL, mtxR, distR, imgL_gray.shape[::-1], Rot, Trns, rectify_scale,(0,0))
+
+
+
+    # print(retS)
+    print("rotation is : {}".format(Rot))
+    print("translation is : {}".format(Trns))
+    print("reprojection error : {}".format(retS))
+
+    np.savetxt(os.path.join(outputDir, "intrinsicLeft.npy"),np.asarray(new_mtxL))
+    np.savetxt(os.path.join(outputDir, "intrinsicRight.npy"),np.asarray(new_mtxR))
+    np.savetxt(os.path.join(outputDir, "rotationLeftToRight.npy"),np.asarray(Rot))
+    np.savetxt(os.path.join(outputDir, "translationLeftToRight.npy"),np.asarray(Trns))
+
+
+
+def camLidarCalibration(trainingDir, validationDir, outputDir, camera):
+
 
     objp = np.zeros((6*8,3), np.float32)
     objp[:,:2] = np.mgrid[0:8,0:6].T.reshape(-1,2)
@@ -386,31 +548,26 @@ if __name__ == "__main__":
     objpoints = [] # 3d point in real world space
     imgpoints = [] # 2d points in image plane.
 
-    if(args.training_dir):
-        images,lidar_points_orig= load_data(args.training_dir)
-
-        # lidar_points_orig = [x * 100 for x in lidar_points_orig]
-
-        
-    elif(args.testing_dir):
-        images,lidar_points_orig= load_data(args.testing_dir)
+    images,lidar_points_orig= load_data(trainingDir, camera)
     lidar_points= normalize_points(lidar_points_orig)
     # print(lidar_points)
     lidar_points_orig = np.asarray(lidar_points_orig)
     # print(lidar_points_orig)
     rvecs, tvecs = get_extrinsic_matrices(images, objpoints, imgpoints)
-    # print(rvecs, tvecs)
-    camera_points = transform_world_to_camera(objpoints, rvecs, tvecs)
-    
-    
+    # print("tvecs are : {}".format(tvecs))
+    camera_points_orig= transform_world_to_camera(objpoints, rvecs, tvecs)
+    camera_points = normalize_points(camera_points_orig)
+    # print("cameras pointqqqqs are : {}".format(camera_points))
     camera_normals= normal_in_camera_frame(rvecs)
 
     lidar_normals = normal_in_lidar_frame(lidar_points)
     lidar_normals_orig = normal_in_lidar_frame(lidar_points_orig)
 
-    camera_centres =  tvecs#find_lidar_centres(camera_points)
+    # camera_centres =  tvecs#find_lidar_centres(camera_points)
+    camera_centres =  find_lidar_centres(camera_points_orig)
     lidar_centres = find_lidar_centres(lidar_points_orig)
     
+
     A=np.asarray(camera_normals[0])
     for i in range(1,len(camera_normals)):
         A=np.hstack((A,camera_normals[i]))
@@ -421,48 +578,36 @@ if __name__ == "__main__":
         B=np.hstack((B,lidar_normals[i]))
 
 
-    if(args.training_dir):
-        rotation_CTL = rotation_calculation(A, B)
-        np.savetxt(os.path.join(args.output_dir, "rotation_CTL.npy"),rotation_CTL)
-        rotation_LTC = rotation_calculation(B, A)
-        np.savetxt(os.path.join(args.output_dir, "rotation_LTC.npy"),rotation_LTC)
-        
-        translation_CTL = translation_calculation(lidar_centres, camera_centres, lidar_normals, camera_normals, rotation_CTL)
-        np.savetxt(os.path.join(args.output_dir, "translation_CTL.npy"),translation_CTL)
-        # exit(1)
-        translation_LTC = translation_calculation(camera_centres, lidar_centres, camera_normals,  lidar_normals_orig, rotation_LTC)
-        np.savetxt(os.path.join(args.output_dir, "translation_LTC.npy"),translation_LTC)
+    
+    rotation_CTL = rotation_calculation(A, B)
+    np.savetxt(os.path.join(outputDir, "rotation{}CamToLidar.npy".format(camera)),rotation_CTL)
+    
 
-        
-    elif(args.testing_dir):
-        rotation_CTL = np.loadtxt(os.path.join(args.output_dir, "rotation_CTL.npy"))
-        translation_CTL = np.loadtxt(os.path.join(args.output_dir,"translation_CTL.npy"))
-        translation_CTL = np.reshape(translation_CTL, (1, 3))
-        rotation_LTC = np.loadtxt(os.path.join(args.output_dir, "rotation_LTC.npy"))
-        translation_LTC = np.loadtxt(os.path.join(args.output_dir,"translation_LTC.npy"))
-        translation_LTC = np.reshape(translation_LTC, (1, 3))
+    translation_CTL = translation_calculation(lidar_centres, camera_centres, lidar_normals, camera_normals, rotation_CTL)
+    np.savetxt(os.path.join(outputDir, "translation{}CamToLidar.npy".format(camera)),translation_CTL)
         
 
-    cam_points = transformation(lidar_points_orig, camera_points, rotation_CTL, translation_CTL, plot_transformation = config["plot_cam_lidar_plots"])
+    cam_points = transformation(lidar_points_orig, camera_points_orig, rotation_CTL, translation_CTL, plot_transformation = config["plot_cam_lidar_plots"])
     
     print("rotation CTL : ", rotation_CTL)
     
     print("translation CTL : ", translation_CTL)
     
-    print("rotation LTC : ", rotation_LTC)
-    
-    print("translation LTC : ", translation_LTC)
-    
-    cosine_distance, offset_distance = error_estimate(lidar_points_orig,camera_points , lidar_normals, camera_normals, lidar_centres, camera_centres, rotation_CTL, translation_CTL )
+    cosine_distance, offset_distance = error_estimate(lidar_points_orig,camera_points_orig , lidar_normals_orig, camera_normals, lidar_centres, camera_centres, rotation_CTL, translation_CTL )
 
     print("cosine distane normal CTL: ", cosine_distance)
     print("translation offset CTL : ", offset_distance)
 
-    cosine_distance, offset_distance = error_estimate(camera_points, lidar_points_orig,  camera_normals, lidar_normals, camera_centres, lidar_centres, rotation_LTC, translation_LTC, string = "Lidar To Camera")
-
-
-    print("cosine distane normal LTC: ", cosine_distance)
-    print("translation offset LTC : ", offset_distance)
-
     if (config["plot_cam_lidar_normals"]):
-        plot_graphs(camera_normals, lidar_normals, rotation_LTC)
+        plot_graphs(lidar_normals, camera_normals, rotation_CTL)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('--training_dir', required=False, type=str, help='training_folder')
+    parser.add_argument('--testing_dir', required=False, type=str, help='testing_folder')
+    parser.add_argument('--output_dir', required = True, type=str, help='Folder to save rotation and translation vectors')
+    
+    args = parser.parse_args()
+
+    camLidarCalibration(args.training_dir, args.testing_dir, args.output_dir, cameras = "left")

@@ -61,11 +61,12 @@ def synchronize_files(image_path, pcd_path,  scaled_files_folder):
         print(i)
         shutil.copy(os.path.join(image_path, i), os.path.join(scaled_images_path, i))
 
-
+    print("pcd path : {}".format(pcd_path))
+    # print(os.listdir(pcd_path))
     floating_points = files_to_float(os.listdir(pcd_path))
     synced_files_path = os.path.join(scaled_files_folder, "synced_lidar_points")
     sync_file_ext = ".pcd"
-    
+    print(floating_points)
     print("synced files path : ", synced_files_path)
     # exit(0)
     if not os.path.exists(synced_files_path):
@@ -89,14 +90,13 @@ def synchronize_files(image_path, pcd_path,  scaled_files_folder):
                 # print("abs(num - timestamp_float) : {} and closest is : {}".format(abs(num - timestamp_float), closest))
                 
         print("closest : {:.6f} ".format(closest))
-        shutil.copy(os.path.join(pcd_path, str("{:.6f}".format(closest))+sync_file_ext), synced_files_path)# print("{:.6f}".format(closest))
+        shutil.copy(os.path.join(pcd_path, str("{:.9f}".format(closest))+sync_file_ext), synced_files_path)# print("{:.6f}".format(closest))
     # print(closest)
         # break
     # break
     print("synced lidar points path : ", synced_files_path)
     print("length of images : ", len(os.listdir(path)))
     print("length of synced lidar points  : ", len(os.listdir(synced_files_path)))
-    extract_file_per_sec(path, synced_files_path)
     # 
 
 if __name__ == "__main__":

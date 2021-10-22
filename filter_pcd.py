@@ -192,7 +192,7 @@ def filter_inliers(lidar_points, inliers):
     print("##########################################################")
     return lidar_points
 
-def filter_pcd(path_pcd, images_dir, save_dir_lidar, save_dir_images, save_plots):
+def filter_pcd(path_pcd, images_dir_left, images_dir_right, save_dir_lidar, save_dir_images_left,save_dir_images_right , save_plots):
 
     # cosine_distance = 2.0
     board_width = 0.108*6#+0.098 + 0.122
@@ -202,27 +202,32 @@ def filter_pcd(path_pcd, images_dir, save_dir_lidar, save_dir_images, save_plots
     if not os.path.exists(save_dir_lidar):
         os.makedirs(save_dir_lidar)
 
-    if not os.path.exists(save_dir_images):
-        os.makedirs(save_dir_images)
+    if not os.path.exists(save_dir_images_left):
+        os.makedirs(save_dir_images_left)
     
+
+
+    if not os.path.exists(save_dir_images_right):
+        os.makedirs(save_dir_images_right)
     if not os.path.exists(save_plots):
         os.makedirs(save_plots)
 
     # f_normals = []
     counter_cosine_great = 0
-    for i, (pcd_file, image_file) in enumerate(zip(sorted(os.listdir(path_pcd)), sorted(os.listdir(images_dir)))):
+    for i, (pcd_file, image_file_left, image_file_right) in enumerate(zip(sorted(os.listdir(path_pcd)), sorted(os.listdir(images_dir_left)), sorted(os.listdir(images_dir_right)))):
         # print()
         print(pcd_file, "\n\n\n\n\n")
         file= os.path.join(path_pcd, pcd_file)
 
         pcd = o3d.io.read_point_cloud(file)
         np_arr = np.asarray(pcd.points)  
+        # print(np_arr)
 
         cart_to_cylin = cart2pol(np_arr)
 
         filtered_arr = filter(cart_to_cylin)
         cylin_to_cart = pol2cart(filtered_arr)
-        
+        print(cylin_to_cart)
         # robustly fit line only using inlier data with RANSAC algorithm
         inliers = apply_ransac(cylin_to_cart, pcd_file, save_plots)
         # print("cylin_to_cart : {}".format(cylin_to_cart[0:10]))
@@ -276,7 +281,8 @@ def filter_pcd(path_pcd, images_dir, save_dir_lidar, save_dir_images, save_plots
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(fin_lidar_points)
         o3d.io.write_point_cloud(os.path.join(save_dir_lidar, pcd_file), pcd)
-        shutil.copy(os.path.join(images_dir, image_file),os.path.join(save_dir_images, image_file))
+        shutil.copy(os.path.join(images_dir_left, image_file_left),os.path.join(save_dir_images_left, image_file_left))
+        shutil.copy(os.path.join(images_dir_right, image_file_right),os.path.join(save_dir_images_right, image_file_right))
     # break
     
     print("The number of files for which Cosine distance was greater is : {}".format(counter_cosine_great))
